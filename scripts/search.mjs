@@ -1,5 +1,6 @@
 // 搜索抖音视频:打开搜索页,监听搜索接口响应,输出结果列表(JSON)
-// 用法: node scripts/search.mjs --keyword "关键词" [--count 15] [--headful]
+// 用法: node scripts/search.mjs --keyword "关键词" [--count 15] [--headless]
+// 默认显示浏览器窗口:抖音风控会拦截无头浏览器,无头模式经常抓不到数据
 import { launch, normalizeAweme, getArg, hasFlag } from './lib.mjs';
 
 const keyword = getArg('keyword');
@@ -9,7 +10,7 @@ if (!keyword) {
 }
 const COUNT = parseInt(getArg('count', '10'), 10);
 
-const context = await launch({ headless: !hasFlag('headful') });
+const context = await launch({ headless: hasFlag('headless') });
 const page = context.pages()[0] || (await context.newPage());
 
 const videos = new Map();
@@ -41,12 +42,16 @@ await page.goto(
   { waitUntil: 'domcontentloaded' }
 );
 
-await page.waitForTimeout(5000);
-for (let i = 0; i < 8 && videos.size < COUNT; i++) {
+await page.waitForTimeout(8000);
+for (let i = 0; i < 10 && videos.size < COUNT; i++) {
   await page.mouse.wheel(0, 2000); // 滚动触发加载更多
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(2000);
 }
 
 const list = [...videos.values()].slice(0, COUNT);
+if (list.length === 0) {
+  console.error('⚠️ 没有抓到任何结果。若浏览器窗口里出现滑块/验证码,请手动完成验证后重试;');
+  console.error('   搜索通常需要登录态,未登录请先运行 node scripts/login.mjs');
+}
 console.log(JSON.stringify({ keyword, count: list.length, videos: list }, null, 2));
 await context.close();

@@ -26,7 +26,12 @@ export async function launch({ headless = true } = {}) {
   let lastErr;
   for (const channel of channels) {
     try {
-      return await chromium.launchPersistentContext(USER_DATA_DIR, { ...options, channel });
+      const context = await chromium.launchPersistentContext(USER_DATA_DIR, { ...options, channel });
+      // 降低被风控识别为自动化的概率
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
+      return context;
     } catch (e) {
       lastErr = e;
       if (!/Executable doesn't exist|install/i.test(String(e))) throw e;

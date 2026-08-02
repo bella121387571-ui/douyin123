@@ -13,7 +13,8 @@ if (!videoPath || !fs.existsSync(videoPath)) {
   process.exit(2);
 }
 
-const context = await launch({ headless: !hasFlag('headful') });
+// 发布操作始终显示窗口,方便观察上传进度和处理可能出现的验证
+const context = await launch({ headless: false });
 const page = context.pages()[0] || (await context.newPage());
 
 if (!(await isLoggedIn(context))) requireLoginHint();

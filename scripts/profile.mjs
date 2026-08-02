@@ -1,11 +1,12 @@
 // 看主页:默认打开自己的主页,输出账号资料 + 已发布作品及各项数据(JSON)
-// 用法: node scripts/profile.mjs [--url 他人主页链接] [--count 20] [--headful]
+// 用法: node scripts/profile.mjs [--url 他人主页链接] [--count 20] [--headless]
+// 默认显示浏览器窗口:抖音风控会拦截无头浏览器,无头模式经常抓不到数据
 import { launch, isLoggedIn, requireLoginHint, normalizeAweme, getArg, hasFlag } from './lib.mjs';
 
 const url = getArg('url', 'https://www.douyin.com/user/self');
 const COUNT = parseInt(getArg('count', '20'), 10);
 
-const context = await launch({ headless: !hasFlag('headful') });
+const context = await launch({ headless: hasFlag('headless') });
 const page = context.pages()[0] || (await context.newPage());
 
 let profile = null;
