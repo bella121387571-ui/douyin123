@@ -1,0 +1,10 @@
+{
+  "name": "douyin",
+  "version": "0.1.0",
+  "description": "让 Claude 刷抖音、搜抖音、发抖音的插件:基于 Playwright 驱动抖音网页版与创作者中心",
+  "author": {
+    "name": "bella121387571-ui"
+  },
+  "commands": "./commands",
+  "skills": "./skills"
+}

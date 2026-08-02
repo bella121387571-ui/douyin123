@@ -1,0 +1,16 @@
+{
+  "name": "claude-douyin-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code 抖音插件的浏览器自动化脚本",
+  "scripts": {
+    "login": "node scripts/login.mjs",
+    "feed": "node scripts/feed.mjs",
+    "search": "node scripts/search.mjs",
+    "post": "node scripts/post.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

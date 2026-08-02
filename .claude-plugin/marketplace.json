@@ -1,0 +1,13 @@
+{
+  "name": "douyin-marketplace",
+  "owner": {
+    "name": "bella121387571-ui"
+  },
+  "plugins": [
+    {
+      "name": "douyin",
+      "source": "./",
+      "description": "让 Claude 刷抖音、搜抖音、发抖音:Playwright 驱动抖音网页版与创作者中心"
+    }
+  ]
+}
