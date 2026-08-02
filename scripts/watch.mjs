@@ -38,8 +38,21 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(1500);
 
+// 顺手清理 24 小时前的旧截图,防止磁盘堆积(独立清理见 scripts/cleanup.mjs)
+const watchBase = path.join(process.cwd(), '.douyin-data', 'watch');
+try {
+  for (const name of fs.readdirSync(watchBase)) {
+    const p = path.join(watchBase, name);
+    if (Date.now() - fs.statSync(p).mtimeMs > 24 * 3600 * 1000) {
+      fs.rmSync(p, { recursive: true, force: true });
+    }
+  }
+} catch {
+  /* 目录不存在等情况,忽略 */
+}
+
 const id = (url.match(/video\/(\d+)/) || [])[1] || String(Date.now());
-const dir = path.join(process.cwd(), '.douyin-data', 'watch', id);
+const dir = path.join(watchBase, id);
 fs.mkdirSync(dir, { recursive: true });
 
 const framePaths = [];
