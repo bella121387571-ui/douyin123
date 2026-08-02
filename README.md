@@ -32,6 +32,29 @@ npx playwright install chromium
 > 「搜一下 ‘咖啡拉花’,告诉我点赞最高的三条是怎么拍的」
 > 「把 ~/Videos/cat.mp4 发到抖音,文案你帮我想一个」
 
+## 方式二:接入 Claude Desktop 桌面版(MCP)
+
+不想用终端的话,可以把本插件作为 MCP 服务器接到 Claude Desktop(普通聊天窗口界面):
+
+1. 安装 [Claude Desktop](https://claude.ai/download),克隆本仓库并 `npm install`。
+2. 编辑配置文件(Windows 按 `Win+R` 输入 `%APPDATA%\Claude\claude_desktop_config.json`;Mac 在 `~/Library/Application Support/Claude/claude_desktop_config.json`),加入:
+
+```json
+{
+  "mcpServers": {
+    "douyin": {
+      "command": "node",
+      "args": ["C:\\Users\\你的用户名\\douyin123\\mcp\\server.mjs"]
+    }
+  }
+}
+```
+
+3. 完全退出并重启 Claude Desktop,输入框下方出现工具图标即接入成功。
+4. 直接聊天:「看看我的抖音主页」「刷会儿抖音总结下趋势」「把 XX 视频发抖音」。
+
+MCP 工具列表:`douyin_login` / `douyin_feed` / `douyin_search` / `douyin_profile` / `douyin_post`(发布仍是默认存草稿、确认后才公开)。
+
 ## 安全设计
 
 - **发布需二次确认**:`post` 默认只上传 + 填文案 + 存草稿,只有你明确确认后 Claude 才会加 `--publish` 真正发布。

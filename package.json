@@ -8,9 +8,12 @@
     "login": "node scripts/login.mjs",
     "feed": "node scripts/feed.mjs",
     "search": "node scripts/search.mjs",
-    "post": "node scripts/post.mjs"
+    "post": "node scripts/post.mjs",
+    "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
-    "playwright": "^1.49.0"
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "playwright": "^1.49.0",
+    "zod": "^3.24.0"
   }
 }
