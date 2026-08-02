@@ -1,0 +1,31 @@
+# 抖音助手项目
+
+本项目是抖音自动化工具:用 Playwright 驱动浏览器操作抖音网页版,帮用户刷抖音、搜视频、看主页数据、发视频。
+
+## 可用脚本(在项目根目录运行)
+
+| 任务 | 命令 |
+| --- | --- |
+| 扫码登录(首次必须) | `node scripts/login.mjs` |
+| 刷推荐流 | `node scripts/feed.mjs --count 15` |
+| 关键词搜索 | `node scripts/search.mjs --keyword "美食" --count 15` |
+| 看用户自己的主页(资料+作品数据) | `node scripts/profile.mjs` |
+| 看他人主页 | `node scripts/profile.mjs --url "https://www.douyin.com/user/xxx"` |
+| 发视频(存草稿) | `node scripts/post.mjs --video 路径.mp4 --title "文案 #话题"` |
+| 发视频(直接发布) | 同上加 `--publish` |
+
+## 工作方式
+
+- 用户说「刷抖音 / 看看什么在火」→ 跑 feed 脚本,把 JSON 整理成易读清单(作者、文案、点赞、链接),总结内容趋势。
+- 用户说「看我主页 / 分析我的账号」→ 跑 profile 脚本,汇报账号概况(粉丝/获赞/作品数),按点赞排序列作品,分析哪条表现好、给选题建议。
+- 用户说「搜XX」→ 跑 search 脚本,按点赞排序,点评哪类内容数据好。
+- 用户说「发视频」→ 确认视频路径;没给文案就帮忙写一个(标题≤30字,带1-3个#话题);先跑 post **不带** `--publish`(存草稿),把文案给用户确认;用户明确同意发布后才加 `--publish` 重跑。**未经确认绝不直接发布。**
+
+## 注意事项
+
+- 脚本默认弹出浏览器窗口(抖音风控拦无头浏览器,别加 --headless)。
+- 报「未登录」→ 让用户跑 `node scripts/login.mjs` 扫码。
+- 抓到 0 条 → 多半是窗口里弹了滑块验证,提醒用户手动完成后重试。
+- 首次使用如果缺依赖,先 `npm install`(浏览器用本机 Chrome/Edge,无需 playwright install)。
+- 抖音网页改版可能导致选择器失效,可加 `--headful` 观察页面后修 scripts/ 里的选择器。
+- 输出别贴原始 JSON,整理成人能读的清单和结论。
