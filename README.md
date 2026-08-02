@@ -24,6 +24,8 @@ npx playwright install chromium
 | `/douyin:feed 15` | 刷 15 条推荐流,Claude 汇总成清单 + 趋势点评 |
 | `/douyin:search 美食探店 20` | 搜索关键词,按点赞排序并分析哪类内容数据好 |
 | `/douyin:profile` | 看自己主页:粉丝/获赞数据 + 作品表现分析(也可传他人主页链接) |
+| `/douyin-likes` / `/douyin-collects` | 看我喜欢 / 收藏的视频 |
+| `/douyin-comments` | 看我作品收到的评论(创作者中心) |
 | `/douyin:post ./demo.mp4 "今天的日落 #风景"` | 上传视频并填好文案,**默认存草稿** |
 
 也可以直接跟 Claude 说自然语言,比如:

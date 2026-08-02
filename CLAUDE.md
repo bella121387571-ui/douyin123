@@ -11,6 +11,9 @@
 | 关键词搜索 | `node scripts/search.mjs --keyword "美食" --count 15` |
 | 看用户自己的主页(资料+作品数据) | `node scripts/profile.mjs` |
 | 看他人主页 | `node scripts/profile.mjs --url "https://www.douyin.com/user/xxx"` |
+| 看我喜欢的视频 | `node scripts/my.mjs --type likes --count 20` |
+| 看我收藏的视频 | `node scripts/my.mjs --type collects --count 20` |
+| 看我作品收到的评论 | `node scripts/comments.mjs --count 30` |
 | 发视频(存草稿) | `node scripts/post.mjs --video 路径.mp4 --title "文案 #话题"` |
 | 发视频(直接发布) | 同上加 `--publish` |
 
@@ -19,6 +22,8 @@
 - 用户说「刷抖音 / 看看什么在火」→ 跑 feed 脚本,把 JSON 整理成易读清单(作者、文案、点赞、链接),总结内容趋势。
 - 用户说「看我主页 / 分析我的账号」→ 跑 profile 脚本,汇报账号概况(粉丝/获赞/作品数),按点赞排序列作品,分析哪条表现好、给选题建议。
 - 用户说「搜XX」→ 跑 search 脚本,按点赞排序,点评哪类内容数据好。
+- 用户说「看我喜欢的 / 我收藏的」→ 跑 my 脚本(likes/collects),整理清单,可顺带总结用户兴趣偏好。
+- 用户说「看我的评论」→ 跑 comments 脚本;注意它抓的是**别人评论我作品**的(网页版没有「我发出的评论」入口,要向用户说明)。可帮用户挑出值得回复的评论、总结观众反馈。
 - 用户说「发视频」→ 确认视频路径;没给文案就帮忙写一个(标题≤30字,带1-3个#话题);先跑 post **不带** `--publish`(存草稿),把文案给用户确认;用户明确同意发布后才加 `--publish` 重跑。**未经确认绝不直接发布。**
 
 ## 注意事项

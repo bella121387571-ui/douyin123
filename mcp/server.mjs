@@ -106,6 +106,48 @@ server.registerTool(
 );
 
 server.registerTool(
+  'douyin_likes',
+  {
+    title: '看我喜欢的视频',
+    description:
+      '抓取用户自己主页「喜欢」列表里的视频,返回 JSON(作者、文案、点赞数、链接)。需已登录。适合分析用户的兴趣偏好或找回看过的视频。',
+    inputSchema: {
+      count: z.number().int().min(1).max(100).default(20).describe('最多抓取的条数,默认 20'),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ count }) => toResult(await runScript('my.mjs', ['--type', 'likes', '--count', String(count)]))
+);
+
+server.registerTool(
+  'douyin_collections',
+  {
+    title: '看我收藏的视频',
+    description:
+      '抓取用户自己主页「收藏」列表里的视频,返回 JSON(作者、文案、点赞数、链接)。需已登录。',
+    inputSchema: {
+      count: z.number().int().min(1).max(100).default(20).describe('最多抓取的条数,默认 20'),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ count }) => toResult(await runScript('my.mjs', ['--type', 'collects', '--count', String(count)]))
+);
+
+server.registerTool(
+  'douyin_comments',
+  {
+    title: '看我作品收到的评论',
+    description:
+      '从创作者中心抓取别人对用户作品的评论(评论内容、评论者、点赞数、对应作品)。需已登录。注意:抖音网页版没有「我发出的评论」入口,此工具看的是收到的评论;若用户想看自己发出的评论,请说明该限制。',
+    inputSchema: {
+      count: z.number().int().min(1).max(100).default(30).describe('最多抓取的条数,默认 30'),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ count }) => toResult(await runScript('comments.mjs', ['--count', String(count)]))
+);
+
+server.registerTool(
   'douyin_post',
   {
     title: '发抖音视频',
