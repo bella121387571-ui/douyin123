@@ -27,16 +27,24 @@ if ((await video.count()) === 0) {
   process.exit(1);
 }
 
-// 静音、从头播放,避免吵到用户也保证截到开头的画面
-await page.evaluate(() => {
-  const v = document.querySelector('video');
-  if (v) {
+// 等视频真正可播(拿到时长和画面尺寸),顺便静音
+let meta = null;
+try {
+  await page.waitForFunction(
+    () => {
+      const v = document.querySelector('video');
+      return v && v.duration > 0 && v.videoWidth > 0;
+    },
+    { timeout: 30000 }
+  );
+  meta = await page.evaluate(() => {
+    const v = document.querySelector('video');
     v.muted = true;
-    v.currentTime = 0;
-    v.play().catch(() => {});
-  }
-});
-await page.waitForTimeout(1500);
+    return { duration: v.duration };
+  });
+} catch {
+  /* 拿不到元数据就走实时播放兜底 */
+}
 
 // 顺手清理 24 小时前的旧截图,防止磁盘堆积(独立清理见 scripts/cleanup.mjs)
 const watchBase = path.join(process.cwd(), '.douyin-data', 'watch');
@@ -56,15 +64,73 @@ const dir = path.join(watchBase, id);
 fs.mkdirSync(dir, { recursive: true });
 
 const framePaths = [];
-for (let i = 0; i < FRAMES; i++) {
-  const file = path.join(dir, `frame-${String(i + 1).padStart(2, '0')}.png`);
+
+// 用 canvas 抓当前解码帧(元素截图容易截到封面/黑屏,canvas 拿的是真实画面)
+async function captureFrame(file) {
+  const dataUrl = await page.evaluate(() => {
+    const v = document.querySelector('video');
+    if (!v || v.videoWidth === 0) return null;
+    const c = document.createElement('canvas');
+    const scale = Math.min(1, 960 / v.videoWidth);
+    c.width = Math.round(v.videoWidth * scale);
+    c.height = Math.round(v.videoHeight * scale);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    try {
+      return c.toDataURL('image/jpeg', 0.85);
+    } catch {
+      return null; // 跨域污染等情况,退回元素截图
+    }
+  });
+  if (dataUrl && dataUrl.startsWith('data:image/jpeg')) {
+    fs.writeFileSync(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    return true;
+  }
   try {
     await video.screenshot({ path: file });
-    framePaths.push(file);
+    return true;
   } catch {
-    /* 某帧截失败就跳过 */
+    return false;
   }
-  await page.waitForTimeout(INTERVAL * 1000);
+}
+
+if (meta) {
+  // 在整条视频时长上均匀取点截帧,覆盖全片而不只是开头
+  for (let i = 0; i < FRAMES; i++) {
+    const t = (meta.duration * (i + 0.5)) / FRAMES;
+    await page.evaluate(async (t) => {
+      const v = document.querySelector('video');
+      v.muted = true;
+      v.currentTime = t;
+      await new Promise((r) => {
+        const done = () => {
+          v.removeEventListener('seeked', done);
+          r();
+        };
+        v.addEventListener('seeked', done);
+        setTimeout(done, 3000);
+      });
+      // 播一小段,确保画面已解码
+      await v.play().catch(() => {});
+      await new Promise((r) => setTimeout(r, 200));
+      v.pause();
+    }, t);
+    const file = path.join(dir, `frame-${String(i + 1).padStart(2, '0')}-第${Math.round(t)}秒.jpg`);
+    if (await captureFrame(file)) framePaths.push(file);
+  }
+} else {
+  // 拿不到时长的特殊播放器:退回实时播放截帧
+  await page.evaluate(() => {
+    const v = document.querySelector('video');
+    if (v) {
+      v.muted = true;
+      v.play().catch(() => {});
+    }
+  });
+  for (let i = 0; i < FRAMES; i++) {
+    const file = path.join(dir, `frame-${String(i + 1).padStart(2, '0')}.jpg`);
+    if (await captureFrame(file)) framePaths.push(file);
+    await page.waitForTimeout(INTERVAL * 1000);
+  }
 }
 
 // 文案(页面标题里通常含视频文案)和热评区文本(best-effort)

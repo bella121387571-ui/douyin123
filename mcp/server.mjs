@@ -180,7 +180,11 @@ server.registerTool(
     ];
     for (const f of info.frames) {
       try {
-        content.push({ type: 'image', data: fs.readFileSync(f).toString('base64'), mimeType: 'image/png' });
+        content.push({
+          type: 'image',
+          data: fs.readFileSync(f).toString('base64'),
+          mimeType: f.endsWith('.png') ? 'image/png' : 'image/jpeg',
+        });
       } catch {
         /* 单帧读取失败就跳过 */
       }
