@@ -21,6 +21,7 @@ description: 刷抖音、搜抖音、发抖音。当用户想看抖音热门内�
 | 关键词搜索 | `node scripts/search.mjs --keyword "美食" --count 15` |
 | 看自己主页(资料+作品数据) | `node scripts/profile.mjs` |
 | 看他人主页 | `node scripts/profile.mjs --url "https://www.douyin.com/user/xxx"` |
+| Claude 看某条视频(截帧后用 Read 读图) | `node scripts/watch.mjs --url "视频链接" --frames 6` |
 | 发视频(存草稿) | `node scripts/post.mjs --video a.mp4 --title "文案 #话题"` |
 | 发视频(直接发布) | `node scripts/post.mjs --video a.mp4 --title "文案" --publish` |
 

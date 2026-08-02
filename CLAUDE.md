@@ -13,6 +13,7 @@
 | 看他人主页 | `node scripts/profile.mjs --url "https://www.douyin.com/user/xxx"` |
 | 看我喜欢的视频 | `node scripts/my.mjs --type likes --count 20` |
 | 看我收藏的视频 | `node scripts/my.mjs --type collects --count 20` |
+| Claude 看某条视频(截帧) | `node scripts/watch.mjs --url "视频链接" [--frames 6]` |
 | 看我作品收到的评论 | `node scripts/comments.mjs --count 30` |
 | 看私信会话/聊天记录 | `node scripts/messages.mjs [--with "昵称"]` |
 | 发私信 | `node scripts/messages.mjs --with "昵称" --send "内容"` |
@@ -33,6 +34,7 @@
 - 用户说「看我主页 / 分析我的账号」→ 跑 profile 脚本,汇报账号概况(粉丝/获赞/作品数),按点赞排序列作品,分析哪条表现好、给选题建议。
 - 用户说「搜XX」→ 跑 search 脚本,按点赞排序,点评哪类内容数据好。
 - 用户说「看我喜欢的 / 我收藏的」→ 跑 my 脚本(likes/collects),整理清单,可顺带总结用户兴趣偏好。
+- 用户说「帮我看看这条视频 / 看看我收藏的第N条讲什么」→ 先拿到视频链接(收藏场景先跑 my 脚本取链接),再跑 watch 脚本截帧,用 Read 工具逐张看 frames 目录里的图片,结合文案总结视频内容;视频没有字幕语音信息时只根据画面判断,说明这是基于画面的理解。
 - 用户说「看我的评论」→ 跑 comments 脚本;注意它抓的是**别人评论我作品**的(网页版没有「我发出的评论」入口,要向用户说明)。可帮用户挑出值得回复的评论、总结观众反馈。
 - 用户说「发视频」→ 确认视频路径;没给文案就帮忙写一个(标题≤30字,带1-3个#话题);先跑 post **不带** `--publish`(存草稿),把文案给用户确认;用户明确同意发布后才加 `--publish` 重跑。**未经确认绝不直接发布。**
 
