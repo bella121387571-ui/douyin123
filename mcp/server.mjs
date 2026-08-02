@@ -148,6 +148,48 @@ server.registerTool(
 );
 
 server.registerTool(
+  'douyin_watch',
+  {
+    title: '看视频内容',
+    description:
+      '「观看」一个抖音视频:打开视频页静音播放,按时间顺序截取画面帧,连同文案和热评一起返回(帧以图片形式返回,可直接查看理解视频内容)。配合 douyin_collections/douyin_likes/douyin_feed 拿到视频链接后使用,可回答"这个视频讲了什么"。约需 20-40 秒。',
+    inputSchema: {
+      url: z.string().url().describe('视频链接,如 https://www.douyin.com/video/xxxx'),
+      frames: z.number().int().min(1).max(8).default(4).describe('截取的画面帧数,默认 4;视频信息量大时可加到 8'),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ url, frames }) => {
+    const r = await runScript('watch.mjs', ['--url', url, '--frames', String(frames)]);
+    let info = null;
+    try {
+      info = JSON.parse(r.out.trim());
+    } catch {
+      /* 输出不是 JSON,走通用错误展示 */
+    }
+    if (!info || !Array.isArray(info.frames) || info.frames.length === 0) return toResult(r);
+    const content = [
+      {
+        type: 'text',
+        text:
+          `视频文案/标题:${info.title || '(未取到)'}\n` +
+          `链接:${info.url}\n` +
+          (info.comments_preview ? `热评节选:\n${info.comments_preview}\n` : '') +
+          `\n以下是按时间顺序截取的 ${info.frames.length} 帧画面:`,
+      },
+    ];
+    for (const f of info.frames) {
+      try {
+        content.push({ type: 'image', data: fs.readFileSync(f).toString('base64'), mimeType: 'image/png' });
+      } catch {
+        /* 单帧读取失败就跳过 */
+      }
+    }
+    return { content };
+  }
+);
+
+server.registerTool(
   'douyin_post',
   {
     title: '发抖音视频',
