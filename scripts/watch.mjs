@@ -10,7 +10,7 @@ if (!url) {
   console.error('用法: node scripts/watch.mjs --url "视频链接" [--frames 6] [--interval 2]');
   process.exit(2);
 }
-const FRAMES = Math.min(parseInt(getArg('frames', '6'), 10), 12);
+const FRAMES = Math.min(parseInt(getArg('frames', '12'), 10), 24);
 const INTERVAL = parseFloat(getArg('interval', '2'));
 
 const context = await launch({ headless: hasFlag('headless') });

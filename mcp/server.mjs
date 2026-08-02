@@ -155,7 +155,7 @@ server.registerTool(
       '「观看」一个抖音视频:打开视频页静音播放,按时间顺序截取画面帧,连同文案和热评一起返回(帧以图片形式返回,可直接查看理解视频内容)。配合 douyin_collections/douyin_likes/douyin_feed 拿到视频链接后使用,可回答"这个视频讲了什么"。约需 20-40 秒。',
     inputSchema: {
       url: z.string().url().describe('视频链接,如 https://www.douyin.com/video/xxxx'),
-      frames: z.number().int().min(1).max(8).default(4).describe('截取的画面帧数,默认 4;视频信息量大时可加到 8'),
+      frames: z.number().int().min(1).max(16).default(8).describe('截取的画面帧数,默认 8(在全片时长上均匀分布);长视频或信息量大时可加到 16'),
     },
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
@@ -172,10 +172,13 @@ server.registerTool(
       {
         type: 'text',
         text:
-          `视频文案/标题:${info.title || '(未取到)'}\n` +
-          `链接:${info.url}\n` +
-          (info.comments_preview ? `热评节选:\n${info.comments_preview}\n` : '') +
-          `\n以下是按时间顺序截取的 ${info.frames.length} 帧画面:`,
+          `链接:${info.url}\n\n` +
+          `【作者文案】(这是作者配的文字,不是画面内容):\n${info.title || '(未取到)'}\n\n` +
+          (info.comments_preview
+            ? `【观众热评】(这是评论区的话,也不是画面内容):\n${info.comments_preview}\n\n`
+            : '') +
+          `【视频画面】以下 ${info.frames.length} 张图片是从视频里按时间顺序截取的真实画面帧(文件名含对应秒数)。` +
+          `描述"视频里演了什么/画面是什么"时,只能依据这些图片;文案和热评仅作背景参考,不要当成画面内容:`,
       },
     ];
     for (const f of info.frames) {
