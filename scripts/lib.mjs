@@ -10,14 +10,31 @@ export const USER_DATA_DIR =
 
 export async function launch({ headless = true } = {}) {
   fs.mkdirSync(USER_DATA_DIR, { recursive: true });
-  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+  const options = {
     headless,
     viewport: { width: 1400, height: 900 },
     locale: 'zh-CN',
     timezoneId: 'Asia/Shanghai',
     args: ['--disable-blink-features=AutomationControlled'],
-  });
-  return context;
+  };
+  // 依次尝试:Playwright 自带 Chromium → 本机 Chrome → 本机 Edge。
+  // 国内下载 Playwright 浏览器经常失败,直接用系统已装的浏览器即可。
+  // 也可用环境变量 DOUYIN_BROWSER=chrome|msedge|chromium 强制指定。
+  const channels = process.env.DOUYIN_BROWSER
+    ? [process.env.DOUYIN_BROWSER === 'chromium' ? undefined : process.env.DOUYIN_BROWSER]
+    : [undefined, 'chrome', 'msedge'];
+  let lastErr;
+  for (const channel of channels) {
+    try {
+      return await chromium.launchPersistentContext(USER_DATA_DIR, { ...options, channel });
+    } catch (e) {
+      lastErr = e;
+      if (!/Executable doesn't exist|install/i.test(String(e))) throw e;
+    }
+  }
+  console.error('没有找到可用的浏览器:Playwright 自带 Chromium、本机 Chrome、本机 Edge 都不可用。');
+  console.error('请安装 Chrome/Edge,或运行 npx playwright install chromium 后重试。');
+  throw lastErr;
 }
 
 // 是否已登录:看 douyin.com 域下有没有 sessionid cookie
