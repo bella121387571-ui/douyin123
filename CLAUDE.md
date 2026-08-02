@@ -14,6 +14,16 @@
 | 看我喜欢的视频 | `node scripts/my.mjs --type likes --count 20` |
 | 看我收藏的视频 | `node scripts/my.mjs --type collects --count 20` |
 | 看我作品收到的评论 | `node scripts/comments.mjs --count 30` |
+| 看私信会话/聊天记录 | `node scripts/messages.mjs [--with "昵称"]` |
+| 发私信 | `node scripts/messages.mjs --with "昵称" --send "内容"` |
+| 查「@我」的提醒 | `node scripts/mentions.mjs` |
+| 在视频下发评论 | `node scripts/reply.mjs --url "视频链接" --text "内容"` |
+
+所有脚本支持 `--profile 名字`(或环境变量 `DOUYIN_PROFILE`)切换到独立登录态,用于 Claude 分身小号等多账号场景;不带则用默认账号。
+
+## Claude 分身账号(每日例行)
+
+`daily/daily-prompt.md` 是给 Claude 小号的每日任务说明(查主人的 @提醒并回评论、回主人私信、刷 10 条视频挑几条推荐给主人),由 `daily/run-daily.ps1` 配合 Windows 任务计划每天自动运行。红线:互动只面向主人,不接触陌生账号,不擅自发布视频。
 | 发视频(存草稿) | `node scripts/post.mjs --video 路径.mp4 --title "文案 #话题"` |
 | 发视频(直接发布) | 同上加 `--publish` |
 

@@ -3,10 +3,19 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 
+// 多账号支持:DOUYIN_PROFILE=claude(或 --profile claude)使用独立的登录态目录,
+// 例如给 Claude 自己的小号用,和主账号互不影响
+const PROFILE =
+  process.env.DOUYIN_PROFILE ||
+  (() => {
+    const i = process.argv.indexOf('--profile');
+    return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : '';
+  })();
+
 // 登录态(cookie、localStorage)保存在用户目录下,扫码登录一次后续可复用
 export const USER_DATA_DIR =
   process.env.DOUYIN_USER_DATA_DIR ||
-  path.join(os.homedir(), '.douyin-claude-plugin', 'user-data');
+  path.join(os.homedir(), '.douyin-claude-plugin', PROFILE ? `user-data-${PROFILE}` : 'user-data');
 
 export async function launch({ headless = true } = {}) {
   fs.mkdirSync(USER_DATA_DIR, { recursive: true });

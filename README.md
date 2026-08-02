@@ -57,6 +57,25 @@ npx playwright install chromium
 
 MCP 工具列表:`douyin_login` / `douyin_feed` / `douyin_search` / `douyin_profile` / `douyin_post`(发布仍是默认存草稿、确认后才公开)。
 
+## 进阶玩法:给 Claude 一个自己的抖音小号 🤖
+
+让 Claude 拥有独立账号,每天定时上线:查你 @它 的视频并回评论、回你的私信、刷 10 条视频挑有意思的推荐给你。
+
+1. **注册小号**:用一个新手机号注册抖音账号(建议养号几天再自动化,降低风控风险)。
+2. **给小号登录**(独立登录态,不影响你的主账号):
+   ```powershell
+   $env:DOUYIN_PROFILE='claude'; node scripts/login.mjs
+   ```
+3. **填配置**:编辑 `daily/daily-prompt.md`,把「主人的抖音昵称」改成你的昵称。
+4. **注册每日定时任务**(以每天 20:00 为例,管理员 PowerShell):
+   ```powershell
+   schtasks /create /tn "DouyinClaudeDaily" /sc daily /st 20:00 `
+     /tr "powershell -ExecutionPolicy Bypass -File C:\Users\你的用户名\douyin123\daily\run-daily.ps1"
+   ```
+5. **互动方式**:发视频时 @小号,它当天会来回评论;直接私信小号,它会回复;每天它也会主动私信你分享刷到的内容。运行记录在 `.douyin-data/daily-log.md`。
+
+⚠️ 注意:定时任务需要电脑在该时刻开着;新账号+自动化被抖音风控盯上的概率更高,脚本已把互动范围限制为「只跟你互动」并限量,请勿扩大;若小号被要求验证,手动跑一次对应脚本完成滑块即可。
+
 ## 安全设计
 
 - **发布需二次确认**:`post` 默认只上传 + 填文案 + 存草稿,只有你明确确认后 Claude 才会加 `--publish` 真正发布。
