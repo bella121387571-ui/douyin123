@@ -18,7 +18,8 @@
 | 发私信 | `node scripts/messages.mjs --with "昵称" --send "内容"` |
 | 查「@我」的提醒 | `node scripts/mentions.mjs` |
 | 在视频下发评论 | `node scripts/reply.mjs --url "视频链接" --text "内容"` |
-| 「看」视频内容(截帧) | `node scripts/watch.mjs --url "视频链接" --frames 6` |
+| 「看」视频内容(截帧) | `node scripts/watch.mjs --url "视频链接" --frames 12` |
+| 「看」视频+语音转文字 | 同上加 `--transcribe`(需先跑一次 `scripts\setup-whisper.ps1` 装 ffmpeg/whisper) |
 | 清理临时截图/日志 | `node scripts/cleanup.mjs [--days 1] [--all]`(watch 脚本每次运行也会自动清 24h 前的旧截图) |
 
 所有脚本支持 `--profile 名字`(或环境变量 `DOUYIN_PROFILE`)切换到独立登录态,用于 Claude 分身小号等多账号场景;不带则用默认账号。

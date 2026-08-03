@@ -12,9 +12,23 @@ if (!url) {
 }
 const FRAMES = Math.min(parseInt(getArg('frames', '12'), 10), 24);
 const INTERVAL = parseFloat(getArg('interval', '2'));
+const TRANSCRIBE = hasFlag('transcribe'); // 语音转文字(需 ffmpeg + whisper,见 setup-whisper.ps1)
 
 const context = await launch({ headless: hasFlag('headless') });
 const page = context.pages()[0] || (await context.newPage());
+
+// 顺手从视频详情接口里拿真实播放地址(转写语音时用来下载音频)
+let playUrl = null;
+page.on('response', async (res) => {
+  if (!/\/aweme\/v1\/web\/aweme\/detail\//.test(res.url())) return;
+  try {
+    const d = await res.json();
+    const urls = d?.aweme_detail?.video?.play_addr?.url_list || [];
+    playUrl = urls.find((u) => u.startsWith('https')) || urls[0] || playUrl;
+  } catch {
+    /* 忽略 */
+  }
+});
 
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(6000);
@@ -145,12 +159,45 @@ try {
   /* 忽略 */
 }
 
+// 语音转文字:下载视频→ffmpeg 抽音轨→whisper 识别(全程本机,用完即删媒体文件)
+let transcript = null;
+let transcriptError = null;
+if (TRANSCRIBE) {
+  if (!playUrl) {
+    transcriptError = '没拿到视频播放地址(详情接口未触发),无法转写语音。';
+  } else {
+    try {
+      const resp = await context.request.get(playUrl, {
+        headers: { referer: 'https://www.douyin.com/' },
+        timeout: 60000,
+      });
+      const mediaPath = path.join(dir, 'video.mp4');
+      fs.writeFileSync(mediaPath, await resp.body());
+      const { transcribeFile } = await import('./asr.mjs');
+      const r = transcribeFile(mediaPath, dir);
+      if (r.text) transcript = r.text;
+      else transcriptError = r.error;
+      fs.rmSync(mediaPath, { force: true });
+    } catch (e) {
+      transcriptError = '下载或转写失败: ' + e.message;
+    }
+  }
+}
+
 if (framePaths.length === 0) {
   console.error('⚠️ 一帧都没截到,视频可能没有开始播放。加 --headful 观察页面后重试。');
 }
 console.log(
   JSON.stringify(
-    { url, title, dir, frames: framePaths, comments_preview: commentsPreview },
+    {
+      url,
+      title,
+      dir,
+      frames: framePaths,
+      comments_preview: commentsPreview,
+      transcript,
+      transcript_error: transcriptError,
+    },
     null,
     2
   )

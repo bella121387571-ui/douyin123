@@ -169,12 +169,18 @@ server.registerTool(
     inputSchema: {
       url: z.string().url().describe('视频链接,如 https://www.douyin.com/video/xxxx'),
       frames: z.number().int().min(1).max(16).default(8).describe('截取的画面帧数,默认 8(在全片时长上均匀分布);长视频或信息量大时可加到 16'),
+      transcribe: z
+        .boolean()
+        .default(false)
+        .describe('是否把视频语音转成文字(需本机装好 ffmpeg 和 whisper,见 scripts/setup-whisper.ps1)。口播/剧情类视频建议开启;用户说"连语音一起看"时设为 true'),
     },
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
-  async ({ url, frames }) => {
+  async ({ url, frames, transcribe }) => {
     // 客户端等待上限约 4 分钟,这里必须更早返回
-    const r = await runScript('watch.mjs', ['--url', url, '--frames', String(frames)], 200 * 1000);
+    const args = ['--url', url, '--frames', String(frames)];
+    if (transcribe) args.push('--transcribe');
+    const r = await runScript('watch.mjs', args, 200 * 1000);
     let info = null;
     try {
       info = JSON.parse(r.out.trim());
@@ -191,6 +197,10 @@ server.registerTool(
           (info.comments_preview
             ? `【观众热评】(这是评论区的话,也不是画面内容):\n${info.comments_preview}\n\n`
             : '') +
+          (info.transcript
+            ? `【语音转文字】(视频里说的话,按时间顺序):\n${info.transcript}\n\n`
+            : '') +
+          (info.transcript_error ? `【语音转文字失败】${info.transcript_error}\n\n` : '') +
           `【视频画面】以下 ${info.frames.length} 张图片是从视频里按时间顺序截取的真实画面帧(文件名含对应秒数)。` +
           `描述"视频里演了什么/画面是什么"时,只能依据这些图片;文案和热评仅作背景参考,不要当成画面内容:`,
       },

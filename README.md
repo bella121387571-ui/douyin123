@@ -27,6 +27,8 @@ npx playwright install chromium
 | `/douyin-likes` / `/douyin-collects` | 看我喜欢 / 收藏的视频 |
 | `/douyin-comments` | 看我作品收到的评论(创作者中心) |
 | `/douyin-watch 视频链接` | Claude「看」视频:自动截帧+读文案热评,总结视频内容 |
+
+**语音转文字(可选):** 想让 Claude 连视频里说的话也"听"到,先装一次依赖:`winget install -e --id Gyan.FFmpeg`(重开终端后)运行 `powershell -ExecutionPolicy Bypass -File scripts\setup-whisper.ps1`(自动从国内镜像下载 whisper.cpp 和约 466MB 的模型)。之后对 Claude 说「连语音一起看」即可,识别全程在本机离线进行。 |
 | `/douyin:post ./demo.mp4 "今天的日落 #风景"` | 上传视频并填好文案,**默认存草稿** |
 
 也可以直接跟 Claude 说自然语言,比如:
