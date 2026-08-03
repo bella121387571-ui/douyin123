@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 
 // 多账号支持:DOUYIN_PROFILE=claude(或 --profile claude)使用独立的登录态目录,
 // 例如给 Claude 自己的小号用,和主账号互不影响
@@ -34,21 +35,53 @@ export async function launch({ headless = true } = {}) {
     : [undefined, 'chrome', 'msedge'];
   let lastErr;
   for (const channel of channels) {
-    try {
-      const context = await chromium.launchPersistentContext(USER_DATA_DIR, { ...options, channel });
-      // 降低被风控识别为自动化的概率
-      await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      });
-      return context;
-    } catch (e) {
-      lastErr = e;
-      if (!/Executable doesn't exist|install/i.test(String(e))) throw e;
+    // 每个浏览器渠道最多试两次:第一次失败(多半是上次残留的浏览器进程还锁着
+    // 登录态目录)就清掉残留进程再试一次
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+          ...options,
+          channel,
+          timeout: 45000, // 启动卡住时快速失败,而不是无限等待
+        });
+        // 降低被风控识别为自动化的概率
+        await context.addInitScript(() => {
+          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        });
+        return context;
+      } catch (e) {
+        lastErr = e;
+        if (/Executable doesn't exist|install/i.test(String(e))) break; // 没装这个浏览器,换下一个
+        if (attempt === 0) {
+          console.error('浏览器启动失败,清理残留的自动化浏览器进程后重试……');
+          killStaleBrowsers();
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
+        throw e;
+      }
     }
   }
   console.error('没有找到可用的浏览器:Playwright 自带 Chromium、本机 Chrome、本机 Edge 都不可用。');
   console.error('请安装 Chrome/Edge,或运行 npx playwright install chromium 后重试。');
   throw lastErr;
+}
+
+// 清理残留的自动化浏览器进程:只杀命令行里带我们登录态目录名的进程,
+// 不会影响用户自己打开的浏览器
+export function killStaleBrowsers() {
+  try {
+    if (process.platform === 'win32') {
+      execSync(
+        `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*douyin-claude-plugin*' -and $_.Name -match 'chrome|msedge|chromium' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`,
+        { stdio: 'ignore' }
+      );
+    } else {
+      execSync("pkill -f 'douyin-claude-plugin' || true", { stdio: 'ignore' });
+    }
+  } catch {
+    /* 清理失败不阻塞主流程 */
+  }
 }
 
 // 是否已登录:看 douyin.com 域下有没有 sessionid cookie

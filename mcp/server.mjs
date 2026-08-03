@@ -10,17 +10,30 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-function runScript(script, args = [], timeoutMs = 5 * 60 * 1000) {
+function runScript(script, args = [], timeoutMs = 3 * 60 * 1000) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [path.join(ROOT, 'scripts', script), ...args], {
       cwd: ROOT,
     });
+    // 超时要杀掉整个进程树(含脚本拉起的浏览器),否则残留浏览器会锁住
+    // 登录态目录,导致后续所有调用一直挂起
+    const killTree = () => {
+      try {
+        if (process.platform === 'win32') {
+          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']);
+        } else {
+          child.kill('SIGKILL');
+        }
+      } catch {
+        /* 忽略 */
+      }
+    };
     let out = '';
     let err = '';
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      killTree();
     }, timeoutMs);
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
@@ -160,7 +173,8 @@ server.registerTool(
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   async ({ url, frames }) => {
-    const r = await runScript('watch.mjs', ['--url', url, '--frames', String(frames)]);
+    // 客户端等待上限约 4 分钟,这里必须更早返回
+    const r = await runScript('watch.mjs', ['--url', url, '--frames', String(frames)], 200 * 1000);
     let info = null;
     try {
       info = JSON.parse(r.out.trim());
