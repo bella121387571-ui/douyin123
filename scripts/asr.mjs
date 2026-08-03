@@ -74,7 +74,7 @@ export function transcribeFile(mediaPath, workDir, root = process.cwd()) {
   const outPrefix = path.join(workDir, 'transcript');
   const w = spawnSync(
     whisper,
-    ['-m', model, '-f', wav, '-l', 'auto', '-otxt', '-of', outPrefix, '-np'],
+    ['-m', model, '-f', wav, '-l', 'auto', '-otxt', '-of', outPrefix],
     { stdio: 'ignore', timeout: 3 * 60 * 1000 }
   );
   fs.rmSync(wav, { force: true });
