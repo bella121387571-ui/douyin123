@@ -1,16 +1,8 @@
-# 一键安装语音转文字依赖:whisper.cpp 主程序 + small 模型(优先国内镜像)
+# 一键安装语音转文字依赖:ffmpeg(便携版)+ whisper.cpp 主程序 + small 模型
+# 全部下载到仓库的 tools\ 目录,不需要 winget/管理员权限;优先国内镜像。
 # 用法: 在仓库根目录运行  powershell -ExecutionPolicy Bypass -File scripts\setup-whisper.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$dir = Join-Path $root 'tools\whisper'
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
-
-# 1) ffmpeg 检查(抽音轨用)
-if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
-  Write-Host '[1/3] ffmpeg 已安装 ✓'
-} else {
-  Write-Host '[1/3] 缺 ffmpeg!请先运行: winget install -e --id Gyan.FFmpeg  然后重开 PowerShell 再跑本脚本' -ForegroundColor Yellow
-}
 
 function Download($urls, $out) {
   foreach ($u in $urls) {
@@ -25,7 +17,37 @@ function Download($urls, $out) {
   return $false
 }
 
+# 1) ffmpeg(抽音轨用):系统装过就用系统的,否则下载便携版到 tools\ffmpeg
+$ffdir = Join-Path $root 'tools\ffmpeg'
+$ffexe = Join-Path $ffdir 'ffmpeg.exe'
+if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+  Write-Host '[1/3] ffmpeg 已安装(系统)✓'
+} elseif (Test-Path $ffexe) {
+  Write-Host '[1/3] ffmpeg(便携版)已存在 ✓'
+} else {
+  New-Item -ItemType Directory -Force -Path $ffdir | Out-Null
+  $zip = Join-Path $ffdir 'ffmpeg.zip'
+  $ok = Download @(
+    'https://ghproxy.net/https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip',
+    'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip',
+    'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+  ) $zip
+  if ($ok) {
+    Expand-Archive $zip -DestinationPath $ffdir -Force
+    $found = Get-ChildItem $ffdir -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+    if ($found) { Copy-Item $found.FullName $ffexe -Force }
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    Get-ChildItem $ffdir -Directory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path $ffexe) { Write-Host '[1/3] ffmpeg 便携版下载完成 ✓' }
+    else { Write-Host '[1/3] 解压后没找到 ffmpeg.exe,请手动下载解压并把 ffmpeg.exe 放到 tools\ffmpeg\' -ForegroundColor Red }
+  } else {
+    Write-Host '[1/3] ffmpeg 下载失败。手动下载 https://www.gyan.dev/ffmpeg/builds/ 的 essentials 包,把 bin\ffmpeg.exe 放到 tools\ffmpeg\' -ForegroundColor Red
+  }
+}
+
 # 2) whisper.cpp Windows 主程序
+$dir = Join-Path $root 'tools\whisper'
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $exe = @('whisper-cli.exe','main.exe') | ForEach-Object { Join-Path $dir $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($exe) {
   Write-Host '[2/3] whisper.cpp 已存在 ✓'

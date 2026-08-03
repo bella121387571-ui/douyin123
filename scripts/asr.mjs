@@ -26,6 +26,18 @@ export function findWhisper(root) {
   return candidates.find(canRun) || null;
 }
 
+export function findFfmpeg(root) {
+  const local = [
+    process.env.DOUYIN_FFMPEG,
+    path.join(root, 'tools', 'ffmpeg', 'ffmpeg.exe'),
+    path.join(root, 'tools', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(root, 'tools', 'ffmpeg', 'ffmpeg'),
+  ].filter(Boolean);
+  const found = local.find((f) => fs.existsSync(f));
+  if (found) return found;
+  return canRun('ffmpeg') ? 'ffmpeg' : null;
+}
+
 export function findModel(root) {
   const candidates = [
     process.env.DOUYIN_WHISPER_MODEL,
@@ -37,13 +49,17 @@ export function findModel(root) {
 
 // 返回 { text } 或 { error }
 export function transcribeFile(mediaPath, workDir, root = process.cwd()) {
+  const ffmpeg = findFfmpeg(root);
+  if (!ffmpeg) {
+    return { error: '缺少 ffmpeg(抽取音轨用)。运行 scripts\\setup-whisper.ps1 会自动下载便携版,无需 winget。' };
+  }
   const wav = path.join(workDir, 'audio.wav');
-  const ff = spawnSync('ffmpeg', ['-y', '-i', mediaPath, '-ar', '16000', '-ac', '1', wav], {
+  const ff = spawnSync(ffmpeg, ['-y', '-i', mediaPath, '-ar', '16000', '-ac', '1', wav], {
     stdio: 'ignore',
     timeout: 60000,
   });
   if (ff.error || !fs.existsSync(wav)) {
-    return { error: '缺少 ffmpeg(抽取音轨用)。安装: winget install -e --id Gyan.FFmpeg,装完重开终端。' };
+    return { error: 'ffmpeg 抽取音轨失败(文件损坏或格式异常)。' };
   }
 
   const whisper = findWhisper(root);
