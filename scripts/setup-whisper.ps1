@@ -1,4 +1,4 @@
-# 一键安装语音转文字依赖:ffmpeg(便携版)+ whisper.cpp 主程序 + small 模型
+﻿# 一键安装语音转文字依赖:ffmpeg(便携版)+ whisper.cpp 主程序 + small 模型
 # 全部下载到仓库的 tools\ 目录,不需要 winget/管理员权限;优先国内镜像。
 # 用法: 在仓库根目录运行  powershell -ExecutionPolicy Bypass -File scripts\setup-whisper.ps1
 $ErrorActionPreference = 'Stop'
