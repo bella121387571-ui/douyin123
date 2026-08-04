@@ -85,6 +85,11 @@ if ($exe) {
 
 # 3) 语音模型(small,约 466MB,中文效果好;嫌大可换 ggml-base.bin)
 $model = Join-Path $dir 'ggml-small.bin'
+# 完整的 ggml-small.bin 约 466MB;明显偏小说明是之前下载中断的半截文件,删掉重下
+if ((Test-Path $model) -and ((Get-Item $model).Length -lt 400MB)) {
+  Write-Host ("[3/3] 检测到不完整的模型文件({0:N0} MB),删除重下…" -f ((Get-Item $model).Length / 1MB)) -ForegroundColor Yellow
+  Remove-Item $model -Force
+}
 if (Test-Path $model) {
   Write-Host '[3/3] 模型已存在 ✓'
 } else {
