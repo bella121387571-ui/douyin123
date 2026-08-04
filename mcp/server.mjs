@@ -198,7 +198,7 @@ server.registerTool(
             ? `【观众热评】(这是评论区的话,也不是画面内容):\n${info.comments_preview}\n\n`
             : '') +
           (info.transcript
-            ? `【语音转文字】(视频里说的话,按时间顺序):\n${info.transcript}\n\n`
+            ? `【语音转文字】(视频里说的话,按时间顺序;若不是中文,请在汇报时附上中文翻译):\n${info.transcript}\n\n`
             : '') +
           (info.transcript_error ? `【语音转文字失败】${info.transcript_error}\n\n` : '') +
           `【视频画面】以下 ${info.frames.length} 张图片是从视频里按时间顺序截取的真实画面帧(文件名含对应秒数)。` +
