@@ -99,9 +99,13 @@ export function requireLoginHint() {
 export function normalizeAweme(a) {
   if (!a || !a.aweme_id) return null;
   const stats = a.statistics || {};
+  // 图文帖(图片合集)没有视频,链接走 /note/;视频帖走 /video/
+  const isImages = Array.isArray(a.images) && a.images.length > 0;
   return {
     id: a.aweme_id,
-    url: `https://www.douyin.com/video/${a.aweme_id}`,
+    type: isImages ? '图文' : '视频',
+    image_count: isImages ? a.images.length : undefined,
+    url: `https://www.douyin.com/${isImages ? 'note' : 'video'}/${a.aweme_id}`,
     desc: (a.desc || '').trim(),
     author: a.author?.nickname || '',
     likes: stats.digg_count ?? null,

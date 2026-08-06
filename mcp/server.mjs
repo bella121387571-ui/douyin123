@@ -163,16 +163,19 @@ server.registerTool(
 server.registerTool(
   'douyin_watch',
   {
-    title: '看视频内容',
+    title: '看作品内容',
     description:
-      '「观看」一个抖音视频:打开视频页静音播放,按时间顺序截取画面帧,连同文案和热评一起返回(帧以图片形式返回,可直接查看理解视频内容)。配合 douyin_collections/douyin_likes/douyin_feed 拿到视频链接后使用,可回答"这个视频讲了什么"。约需 20-40 秒。',
+      '「观看」一个抖音作品,视频帖和图文帖都支持:视频帖按时间顺序截取画面帧,图文帖取回每张原图,连同文案和热评一起返回(图片可直接查看)。配合 douyin_collections/douyin_likes/douyin_feed 拿到链接后使用,可回答"这个作品讲了什么"。约需 20-40 秒。',
     inputSchema: {
-      url: z.string().url().describe('视频链接,如 https://www.douyin.com/video/xxxx'),
-      frames: z.number().int().min(1).max(16).default(8).describe('截取的画面帧数,默认 8(在全片时长上均匀分布);长视频或信息量大时可加到 16'),
+      url: z
+        .string()
+        .url()
+        .describe('作品链接,视频帖 https://www.douyin.com/video/xxxx 或图文帖 https://www.douyin.com/note/xxxx'),
+      frames: z.number().int().min(1).max(16).default(8).describe('视频帖截取的画面帧数,默认 8(在全片时长上均匀分布);长视频或信息量大时可加到 16。图文帖会取回全部图片,不受此值限制'),
       transcribe: z
         .boolean()
         .default(false)
-        .describe('是否把视频语音转成文字(需本机装好 ffmpeg 和 whisper,见 scripts/setup-whisper.ps1)。口播/剧情类视频建议开启;用户说"连语音一起看"时设为 true'),
+        .describe('是否把语音转成文字(需本机装好 ffmpeg 和 whisper,见 scripts/setup-whisper.ps1)。口播/剧情类视频建议开启;用户说"连语音一起看"时设为 true。图文帖没有视频音轨,会转写背景音乐'),
     },
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
@@ -198,11 +201,14 @@ server.registerTool(
             ? `【观众热评】(这是评论区的话,也不是画面内容):\n${info.comments_preview}\n\n`
             : '') +
           (info.transcript
-            ? `【语音转文字】(视频里说的话,按时间顺序;若不是中文,请在汇报时附上中文翻译):\n${info.transcript}\n\n`
+            ? `【语音转文字】(来源:${info.transcript_source || '音轨'};若不是中文,请在汇报时附上中文翻译):\n${info.transcript}\n\n`
             : '') +
           (info.transcript_error ? `【语音转文字失败】${info.transcript_error}\n\n` : '') +
-          `【视频画面】以下 ${info.frames.length} 张图片是从视频里按时间顺序截取的真实画面帧(文件名含对应秒数)。` +
-          `描述"视频里演了什么/画面是什么"时,只能依据这些图片;文案和热评仅作背景参考,不要当成画面内容:`,
+          (info.media_type === 'images'
+            ? `【图文内容】这是一个图文帖(不是视频),以下 ${info.frames.length} 张是帖子里的原图,按发布顺序排列。` +
+              `描述内容时只能依据这些图片;文案和热评仅作背景参考:`
+            : `【视频画面】以下 ${info.frames.length} 张图片是从视频里按时间顺序截取的真实画面帧(文件名含对应秒数)。` +
+              `描述"视频里演了什么/画面是什么"时,只能依据这些图片;文案和热评仅作背景参考,不要当成画面内容:`),
       },
     ];
     for (const f of info.frames) {
