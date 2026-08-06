@@ -59,9 +59,90 @@ const dir = path.join(watchBase, id);
 fs.mkdirSync(dir, { recursive: true });
 
 const video = page.locator('video').first();
-const hasVideo = (await video.count()) > 0;
-const mediaType = hasVideo ? 'video' : 'images';
-const framePaths = [];
+
+// 判断是不是视频帖,要看画面能不能真的播出来:图文帖页面里也常有 <video>
+// 元素(用于播放背景音乐),只按元素存在与否判断会误判。
+async function videoPlayable(timeout) {
+  if ((await video.count()) === 0) return false;
+  return page
+    .waitForFunction(
+      () => {
+        const v = document.querySelector('video');
+        return v && v.duration > 0 && v.videoWidth > 0;
+      },
+      { timeout }
+    )
+    .then(() => true)
+    .catch(() => false);
+}
+
+// 三路取图文帖的原图:详情接口 → 页面内嵌数据 → DOM 大图
+async function collectImages() {
+  if (apiImages.length) {
+    console.error(`图文帖:从详情接口拿到 ${apiImages.length} 张图`);
+    return apiImages;
+  }
+
+  // 页面内嵌的 SSR 数据里递归找 images[].url_list
+  const stateImages = await page.evaluate(() => {
+    const out = [];
+    const seenUrl = new Set();
+    const seenObj = new WeakSet();
+    const visit = (node, depth) => {
+      if (!node || typeof node !== 'object' || depth > 10 || out.length > 60) return;
+      if (seenObj.has(node)) return;
+      seenObj.add(node);
+      if (Array.isArray(node)) {
+        for (const it of node) visit(it, depth + 1);
+        return;
+      }
+      if (Array.isArray(node.images)) {
+        for (const im of node.images) {
+          const u = (im?.url_list || []).find((x) => typeof x === 'string' && x.startsWith('http'));
+          if (u && !seenUrl.has(u)) {
+            seenUrl.add(u);
+            out.push(u);
+          }
+        }
+      }
+      for (const k of Object.keys(node)) {
+        try {
+          visit(node[k], depth + 1);
+        } catch {
+          /* getter 抛错,跳过 */
+        }
+      }
+    };
+    for (const r of [window._ROUTER_DATA, window.__INITIAL_STATE__, window.__NUXT__]) visit(r, 0);
+    const el = document.getElementById('RENDER_DATA');
+    if (el) {
+      try {
+        visit(JSON.parse(decodeURIComponent(el.textContent)), 0);
+      } catch {
+        /* 解析失败忽略 */
+      }
+    }
+    return out;
+  });
+  if (stateImages.length) {
+    console.error(`图文帖:从页面内嵌数据拿到 ${stateImages.length} 张图`);
+    return stateImages;
+  }
+
+  // DOM 兜底:先翻几页把懒加载的图触发出来,再收集大图
+  for (let i = 0; i < 10; i++) {
+    await page.keyboard.press('ArrowRight').catch(() => {});
+    await page.waitForTimeout(600);
+  }
+  const domImages = await page.evaluate(() =>
+    [...document.querySelectorAll('img')]
+      .filter((im) => im.naturalWidth >= 300 && im.naturalHeight >= 300)
+      .map((im) => im.currentSrc || im.src)
+      .filter((s) => s && s.startsWith('http'))
+  );
+  if (domImages.length) console.error(`图文帖:从页面 DOM 兜底拿到 ${domImages.length} 张图`);
+  return domImages;
+}
 
 async function saveRemote(fileUrl, file) {
   try {
@@ -77,27 +158,27 @@ async function saveRemote(fileUrl, file) {
   }
 }
 
-if (hasVideo) {
-  // ===== 视频帖:在整条时长上均匀取点截帧 =====
-
-  // 等视频真正可播(拿到时长和画面尺寸),顺便静音
-  let meta = null;
-  try {
-    await page.waitForFunction(
-      () => {
-        const v = document.querySelector('video');
-        return v && v.duration > 0 && v.videoWidth > 0;
-      },
-      { timeout: 30000 }
-    );
-    meta = await page.evaluate(() => {
-      const v = document.querySelector('video');
-      v.muted = true;
-      return { duration: v.duration };
-    });
-  } catch {
-    /* 拿不到元数据就走实时播放兜底 */
+// 先给视频 12 秒机会;播不出来就找图片;都没有再多等视频 20 秒(防止网慢误判)
+let playable = await videoPlayable(12000);
+let imageUrls = [];
+if (!playable) {
+  imageUrls = [...new Set(await collectImages())].slice(0, MAX_IMAGES);
+  if (imageUrls.length === 0) {
+    console.error('没找到图片,再等一会儿视频……');
+    playable = await videoPlayable(20000);
   }
+}
+
+const mediaType = playable ? 'video' : 'images';
+const framePaths = [];
+
+if (playable) {
+  // ===== 视频帖:在整条时长上均匀取点截帧 =====
+  const meta = await page.evaluate(() => {
+    const v = document.querySelector('video');
+    v.muted = true;
+    return { duration: v.duration };
+  });
 
   // 用 canvas 抓当前解码帧(元素截图容易截到封面/黑屏,canvas 拿的是真实画面)
   const captureFrame = async (file) => {
@@ -127,65 +208,30 @@ if (hasVideo) {
     }
   };
 
-  if (meta) {
-    for (let i = 0; i < FRAMES; i++) {
-      const t = (meta.duration * (i + 0.5)) / FRAMES;
-      await page.evaluate(async (t) => {
-        const v = document.querySelector('video');
-        v.muted = true;
-        v.currentTime = t;
-        await new Promise((r) => {
-          const done = () => {
-            v.removeEventListener('seeked', done);
-            r();
-          };
-          v.addEventListener('seeked', done);
-          setTimeout(done, 3000);
-        });
-        // 播一小段,确保画面已解码
-        await v.play().catch(() => {});
-        await new Promise((r) => setTimeout(r, 200));
-        v.pause();
-      }, t);
-      const file = path.join(dir, `frame-${String(i + 1).padStart(2, '0')}-第${Math.round(t)}秒.jpg`);
-      if (await captureFrame(file)) framePaths.push(file);
-    }
-  } else {
-    // 拿不到时长的特殊播放器:退回实时播放截帧
-    await page.evaluate(() => {
+  for (let i = 0; i < FRAMES; i++) {
+    const t = (meta.duration * (i + 0.5)) / FRAMES;
+    await page.evaluate(async (t) => {
       const v = document.querySelector('video');
-      if (v) {
-        v.muted = true;
-        v.play().catch(() => {});
-      }
-    });
-    for (let i = 0; i < FRAMES; i++) {
-      const file = path.join(dir, `frame-${String(i + 1).padStart(2, '0')}.jpg`);
-      if (await captureFrame(file)) framePaths.push(file);
-      await page.waitForTimeout(INTERVAL * 1000);
-    }
+      v.muted = true;
+      v.currentTime = t;
+      await new Promise((r) => {
+        const done = () => {
+          v.removeEventListener('seeked', done);
+          r();
+        };
+        v.addEventListener('seeked', done);
+        setTimeout(done, 3000);
+      });
+      // 播一小段,确保画面已解码
+      await v.play().catch(() => {});
+      await new Promise((r) => setTimeout(r, 200));
+      v.pause();
+    }, t);
+    const file = path.join(dir, `frame-${String(i + 1).padStart(2, '0')}-第${Math.round(t)}秒.jpg`);
+    if (await captureFrame(file)) framePaths.push(file);
   }
 } else {
-  // ===== 图文帖(图片合集):把每张图片下载下来 =====
-  let imageUrls = apiImages;
-  if (imageUrls.length === 0) {
-    // 详情接口没抓到就从页面 DOM 兜底找大图
-    imageUrls = await page.evaluate(() =>
-      [...document.querySelectorAll('img')]
-        .filter((im) => im.naturalWidth > 400 && im.naturalHeight > 400)
-        .map((im) => im.currentSrc || im.src)
-        .filter((s) => s && s.startsWith('http'))
-    );
-  }
-  imageUrls = [...new Set(imageUrls)].slice(0, MAX_IMAGES);
-
-  if (imageUrls.length === 0) {
-    console.error('页面里既没有视频播放器,也没找到图文帖的图片。');
-    console.error('确认链接是作品页;如果窗口里弹了滑块验证,完成后重试。');
-    await context.close();
-    process.exit(1);
-  }
-
+  // ===== 图文帖(图片合集):把每张原图下载下来 =====
   for (let i = 0; i < imageUrls.length; i++) {
     const file = path.join(dir, `image-${String(i + 1).padStart(2, '0')}.jpg`);
     if (await saveRemote(imageUrls[i], file)) framePaths.push(file);
@@ -210,10 +256,10 @@ let transcriptError = null;
 let transcriptSource = null;
 if (TRANSCRIBE) {
   // 视频帖转视频音轨;图文帖没有视频,退而转背景音乐(通常是歌曲/配音)
-  const mediaUrl = hasVideo ? playUrl || musicUrl : musicUrl;
-  transcriptSource = hasVideo ? (playUrl ? '视频音轨' : '背景音乐') : '图文帖的背景音乐';
+  const mediaUrl = playable ? playUrl || musicUrl : musicUrl;
+  transcriptSource = playable ? (playUrl ? '视频音轨' : '背景音乐') : '图文帖的背景音乐';
   if (!mediaUrl) {
-    transcriptError = hasVideo
+    transcriptError = playable
       ? '没拿到视频播放地址(详情接口未触发),无法转写语音。'
       : '这是图文帖,没有视频音轨,也没拿到背景音乐地址。';
     transcriptSource = null;
@@ -236,9 +282,15 @@ if (TRANSCRIBE) {
   }
 }
 
+// 一张都没拿到时留个现场快照,方便排查(交给 Claude 看图即可判断是验证码还是改版)
+let debugShot = null;
 if (framePaths.length === 0) {
-  console.error('⚠️ 一张画面都没拿到。加 --headful 观察页面后重试。');
+  debugShot = path.join(dir, 'debug-page.png');
+  await page.screenshot({ path: debugShot, fullPage: false }).catch(() => (debugShot = null));
+  console.error('⚠️ 一张画面都没拿到:视频播不出来,也没找到图文帖的图片。');
+  if (debugShot) console.error(`   已保存页面快照 ${debugShot},可以让 Claude 看这张图判断原因(常见是滑块验证)。`);
 }
+
 console.log(
   JSON.stringify(
     {
@@ -247,6 +299,7 @@ console.log(
       title,
       dir,
       frames: framePaths,
+      debug_screenshot: debugShot,
       comments_preview: commentsPreview,
       transcript,
       transcript_source: transcriptSource,

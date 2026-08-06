@@ -190,7 +190,28 @@ server.registerTool(
     } catch {
       /* 输出不是 JSON,走通用错误展示 */
     }
-    if (!info || !Array.isArray(info.frames) || info.frames.length === 0) return toResult(r);
+    if (!info || !Array.isArray(info.frames) || info.frames.length === 0) {
+      // 抓不到画面时,把现场快照回传,便于直接看出是滑块验证还是页面改版
+      if (info?.debug_screenshot && fs.existsSync(info.debug_screenshot)) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                '没能取到作品画面。下面是当时的页面快照——如果看到滑块/验证码,请让用户在弹出的浏览器窗口里手动完成验证后重试;' +
+                '如果是登录过期,请让用户运行 douyin_login。',
+            },
+            {
+              type: 'image',
+              data: fs.readFileSync(info.debug_screenshot).toString('base64'),
+              mimeType: 'image/png',
+            },
+          ],
+          isError: true,
+        };
+      }
+      return toResult(r);
+    }
     const content = [
       {
         type: 'text',
