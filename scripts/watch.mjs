@@ -22,16 +22,24 @@ const page = context.pages()[0] || (await context.newPage());
 let playUrl = null;
 let musicUrl = null;
 let apiImages = [];
+const pick = (list) => (list || []).find((u) => u?.startsWith('https')) || (list || [])[0] || null;
+// 一张图有多个 CDN 地址;优先 download_url_list(原图,文字更清晰),再退 url_list
+const pickImage = (im) => pick(im?.download_url_list) || pick(im?.url_list);
+
 page.on('response', async (res) => {
   if (!/\/aweme\/v1\/web\/aweme\/detail\//.test(res.url())) return;
   try {
     const d = await res.json();
     const detail = d?.aweme_detail;
-    const pick = (list) => (list || []).find((u) => u.startsWith('https')) || (list || [])[0] || null;
+    if (!detail) return;
     playUrl = pick(detail?.video?.play_addr?.url_list) || playUrl;
     musicUrl = pick(detail?.music?.play_url?.url_list) || musicUrl;
-    if (Array.isArray(detail?.images) && detail.images.length) {
-      apiImages = detail.images.map((im) => pick(im?.url_list)).filter(Boolean);
+    // 图文帖的图片可能挂在 images 或 image_post_info 下,两处都取
+    const lists = [detail.images, detail.image_post_info?.images_list, detail.image_post_info?.images];
+    for (const arr of lists) {
+      if (!Array.isArray(arr) || !arr.length) continue;
+      const urls = arr.map((im) => pickImage(im) || pickImage(im?.display_image)).filter(Boolean);
+      if (urls.length > apiImages.length) apiImages = urls;
     }
   } catch {
     /* 忽略非 JSON */
@@ -76,11 +84,32 @@ async function videoPlayable(timeout) {
     .catch(() => false);
 }
 
-// 三路取图文帖的原图:详情接口 → 页面内嵌数据 → DOM 大图
+// 同一张图在不同 CDN 上地址不同,按文件名去重
+function dedupeImages(urls) {
+  const seen = new Set();
+  const out = [];
+  for (const u of urls) {
+    if (!u) continue;
+    let key = u;
+    try {
+      const seg = new URL(u).pathname.split('/').filter(Boolean).pop() || u;
+      key = seg.split('~')[0];
+    } catch {
+      /* 非法 URL 就用原串当 key */
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(u);
+  }
+  return out;
+}
+
+// 三路取图文帖的原图并合并:详情接口 + 页面内嵌数据 + DOM 大图
 async function collectImages() {
+  const all = [];
   if (apiImages.length) {
-    console.error(`图文帖:从详情接口拿到 ${apiImages.length} 张图`);
-    return apiImages;
+    console.error(`图文帖:详情接口 ${apiImages.length} 张`);
+    all.push(...apiImages);
   }
 
   // 页面内嵌的 SSR 数据里递归找 images[].url_list
@@ -96,9 +125,13 @@ async function collectImages() {
         for (const it of node) visit(it, depth + 1);
         return;
       }
-      if (Array.isArray(node.images)) {
-        for (const im of node.images) {
-          const u = (im?.url_list || []).find((x) => typeof x === 'string' && x.startsWith('http'));
+      for (const arr of [node.images, node.images_list]) {
+        if (!Array.isArray(arr)) continue;
+        for (const im of arr) {
+          const lists = [im?.download_url_list, im?.url_list, im?.display_image?.url_list];
+          const u = lists
+            .flatMap((l) => (Array.isArray(l) ? l : []))
+            .find((x) => typeof x === 'string' && x.startsWith('http'));
           if (u && !seenUrl.has(u)) {
             seenUrl.add(u);
             out.push(u);
@@ -125,14 +158,14 @@ async function collectImages() {
     return out;
   });
   if (stateImages.length) {
-    console.error(`图文帖:从页面内嵌数据拿到 ${stateImages.length} 张图`);
-    return stateImages;
+    console.error(`图文帖:页面内嵌数据 ${stateImages.length} 张`);
+    all.push(...stateImages);
   }
 
   // DOM 兜底:先翻几页把懒加载的图触发出来,再收集大图
   for (let i = 0; i < 10; i++) {
     await page.keyboard.press('ArrowRight').catch(() => {});
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(500);
   }
   const domImages = await page.evaluate(() =>
     [...document.querySelectorAll('img')]
@@ -140,8 +173,12 @@ async function collectImages() {
       .map((im) => im.currentSrc || im.src)
       .filter((s) => s && s.startsWith('http'))
   );
-  if (domImages.length) console.error(`图文帖:从页面 DOM 兜底拿到 ${domImages.length} 张图`);
-  return domImages;
+  if (domImages.length) console.error(`图文帖:页面 DOM ${domImages.length} 张`);
+  all.push(...domImages);
+
+  const merged = dedupeImages(all);
+  console.error(`图文帖:合并去重后共 ${merged.length} 张`);
+  return merged;
 }
 
 async function saveRemote(fileUrl, file) {
@@ -246,8 +283,16 @@ if (playable) {
   // ===== 图文帖(图片合集):把每张原图下载下来 =====
   for (let i = 0; i < imageUrls.length; i++) {
     const file = path.join(dir, `image-${String(i + 1).padStart(2, '0')}.jpg`);
-    if (await saveRemote(imageUrls[i], file)) framePaths.push(file);
+    if (!(await saveRemote(imageUrls[i], file))) continue;
+    // 太小的多半是占位图/头像,丢掉;文字长截图更要保证清晰度
+    const kb = Math.round(fs.statSync(file).size / 1024);
+    if (kb < 8) {
+      fs.rmSync(file, { force: true });
+      continue;
+    }
+    framePaths.push(file);
   }
+  console.error(`图文帖:成功保存 ${framePaths.length} 张图到 ${dir}`);
 }
 
 // 文案(页面标题里通常含作品文案)和热评区文本(best-effort)
