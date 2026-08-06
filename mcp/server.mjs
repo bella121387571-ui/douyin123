@@ -3,12 +3,48 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findFfmpeg } from '../scripts/asr.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// 单次工具响应有体积上限,原图直接回传会超限报错。这里按需压缩,并给总量封顶。
+const MAX_IMAGE_BYTES = 700 * 1024; // 单张超过就压
+const MAX_TOTAL_BYTES = 4 * 1024 * 1024; // 所有图片合计上限
+
+// 用 ffmpeg 压到合理尺寸;文字截图保留足够分辨率(宽度上限 1400)才读得出字
+function compressImage(file) {
+  const ffmpeg = findFfmpeg(ROOT);
+  if (!ffmpeg) return null;
+  const out = file.replace(/\.(jpg|jpeg|png)$/i, '') + '.small.jpg';
+  const r = spawnSync(
+    ffmpeg,
+    ['-y', '-i', file, '-vf', "scale='min(1400,iw)':-2", '-q:v', '6', out],
+    { stdio: 'ignore', timeout: 60000 }
+  );
+  if (r.error || !fs.existsSync(out)) return null;
+  return out;
+}
+
+// 读取图片并在必要时压缩,返回 base64;超出总量预算返回 null
+function readImageForResponse(file, budget) {
+  try {
+    let target = file;
+    if (fs.statSync(file).size > MAX_IMAGE_BYTES) {
+      const small = compressImage(file);
+      if (small && fs.statSync(small).size < fs.statSync(file).size) target = small;
+    }
+    const size = fs.statSync(target).size;
+    if (size > budget.left) return null;
+    budget.left -= size;
+    return fs.readFileSync(target).toString('base64');
+  } catch {
+    return null;
+  }
+}
 
 function runScript(script, args = [], timeoutMs = 3 * 60 * 1000) {
   return new Promise((resolve) => {
@@ -233,16 +269,28 @@ server.registerTool(
               `描述"视频里演了什么/画面是什么"时,只能依据这些图片;文案和热评仅作背景参考,不要当成画面内容:`),
       },
     ];
+    const budget = { left: MAX_TOTAL_BYTES };
+    let sent = 0;
     for (const f of info.frames) {
-      try {
-        content.push({
-          type: 'image',
-          data: fs.readFileSync(f).toString('base64'),
-          mimeType: f.endsWith('.png') ? 'image/png' : 'image/jpeg',
-        });
-      } catch {
-        /* 单帧读取失败就跳过 */
-      }
+      const data = readImageForResponse(f, budget);
+      if (!data) continue; // 压不下或超预算就跳过,保证响应不超限
+      content.push({ type: 'image', data, mimeType: f.endsWith('.png') ? 'image/png' : 'image/jpeg' });
+      sent++;
+    }
+    if (sent < info.frames.length) {
+      content[0].text += `\n(共 ${info.frames.length} 张,受响应体积限制这里只带回前 ${sent} 张;` +
+        `其余在本机目录 ${info.dir},需要时可让用户直接查看)`;
+    }
+    if (sent === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `取到了 ${info.frames.length} 张图片,但体积过大无法回传。文件在:${info.dir}`,
+          },
+        ],
+        isError: true,
+      };
     }
     return { content };
   }
