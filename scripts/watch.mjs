@@ -163,8 +163,20 @@ let playable = await videoPlayable(12000);
 let imageUrls = [];
 if (!playable) {
   imageUrls = [...new Set(await collectImages())].slice(0, MAX_IMAGES);
-  if (imageUrls.length === 0) {
-    console.error('没找到图片,再等一会儿视频……');
+
+  // 图文帖的正确地址是 /note/;用 /video/ 打开时有些页面不渲染图片,换地址重试
+  if (imageUrls.length === 0 && /\/video\/\d+/.test(url)) {
+    const noteUrl = url.replace(/\/video\/(\d+)/, '/note/$1');
+    console.error(`没找到图片,换图文帖地址重试:${noteUrl}`);
+    apiImages = [];
+    await page.goto(noteUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForTimeout(6000);
+    playable = await videoPlayable(8000);
+    if (!playable) imageUrls = [...new Set(await collectImages())].slice(0, MAX_IMAGES);
+  }
+
+  if (!playable && imageUrls.length === 0) {
+    console.error('还是没找到图片,再等一会儿视频……');
     playable = await videoPlayable(20000);
   }
 }
