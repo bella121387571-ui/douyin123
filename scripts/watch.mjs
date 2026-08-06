@@ -162,22 +162,29 @@ async function collectImages() {
     all.push(...stateImages);
   }
 
-  // DOM 兜底:先翻几页把懒加载的图触发出来,再收集大图
+  // 接口/页面数据是权威来源(只含帖子本身的图);有结果就不掺 DOM,
+  // 否则会混进推荐位封面、头像等无关图片
+  if (all.length) {
+    const merged = dedupeImages(all);
+    console.error(`图文帖:合并去重后共 ${merged.length} 张(来自接口/页面数据)`);
+    return merged;
+  }
+
+  // DOM 兜底:先翻几页把懒加载的图触发出来,再收集正文区的大图
   for (let i = 0; i < 10; i++) {
     await page.keyboard.press('ArrowRight').catch(() => {});
     await page.waitForTimeout(500);
   }
   const domImages = await page.evaluate(() =>
     [...document.querySelectorAll('img')]
-      .filter((im) => im.naturalWidth >= 300 && im.naturalHeight >= 300)
-      .map((im) => im.currentSrc || im.src)
-      .filter((s) => s && s.startsWith('http'))
+      .filter((im) => im.naturalWidth >= 400 && im.naturalHeight >= 400)
+      .map((im) => ({ src: im.currentSrc || im.src, area: im.naturalWidth * im.naturalHeight }))
+      .filter((o) => o.src && o.src.startsWith('http') && !/avatar/i.test(o.src))
+      .sort((a, b) => b.area - a.area) // 正文大图通常比推荐位封面大
+      .map((o) => o.src)
   );
-  if (domImages.length) console.error(`图文帖:页面 DOM ${domImages.length} 张`);
-  all.push(...domImages);
-
-  const merged = dedupeImages(all);
-  console.error(`图文帖:合并去重后共 ${merged.length} 张`);
+  const merged = dedupeImages(domImages);
+  console.error(`图文帖:页面 DOM 兜底,去重后 ${merged.length} 张`);
   return merged;
 }
 
@@ -193,6 +200,35 @@ async function saveRemote(fileUrl, file) {
   } catch {
     return false;
   }
+}
+
+// 抖音图片地址里的 ~tplv-xxx 是缩放/压缩模板,去掉或调高画质常能拿到更大的原图。
+// 文字类长截图必须尽量高清,否则读不出字。
+function urlVariants(u) {
+  const out = [u];
+  const m = u.match(/^([^?]*?)(~tplv-[^?]*)(\?.*)?$/);
+  if (m) out.push(m[1] + (m[3] || ''));
+  if (/q\d{2}/.test(u)) out.push(u.replace(/q\d{2}/g, 'q100'));
+  return [...new Set(out)];
+}
+
+// 同一张图试多个变体,保留体积最大(通常也最清晰)的那份
+async function saveBestImage(fileUrl, file) {
+  let best = null;
+  for (const v of urlVariants(fileUrl)) {
+    const tmp = file + '.tmp';
+    if (!(await saveRemote(v, tmp))) continue;
+    const size = fs.statSync(tmp).size;
+    if (!best || size > best.size) {
+      fs.rmSync(best?.path || '', { force: true });
+      best = { path: tmp, size };
+      fs.renameSync(tmp, file);
+      best.path = file;
+    } else {
+      fs.rmSync(tmp, { force: true });
+    }
+  }
+  return best ? best.size : 0;
 }
 
 // 先给视频 12 秒机会;播不出来就找图片;都没有再多等视频 20 秒(防止网慢误判)
@@ -281,18 +317,19 @@ if (playable) {
   }
 } else {
   // ===== 图文帖(图片合集):把每张原图下载下来 =====
+  const sizes = [];
   for (let i = 0; i < imageUrls.length; i++) {
     const file = path.join(dir, `image-${String(i + 1).padStart(2, '0')}.jpg`);
-    if (!(await saveRemote(imageUrls[i], file))) continue;
+    const bytes = await saveBestImage(imageUrls[i], file);
     // 太小的多半是占位图/头像,丢掉;文字长截图更要保证清晰度
-    const kb = Math.round(fs.statSync(file).size / 1024);
-    if (kb < 8) {
+    if (bytes < 8 * 1024) {
       fs.rmSync(file, { force: true });
       continue;
     }
     framePaths.push(file);
+    sizes.push(Math.round(bytes / 1024));
   }
-  console.error(`图文帖:成功保存 ${framePaths.length} 张图到 ${dir}`);
+  console.error(`图文帖:保存 ${framePaths.length} 张到 ${dir}(大小 KB:${sizes.join(', ')})`);
 }
 
 // 文案(页面标题里通常含作品文案)和热评区文本(best-effort)
