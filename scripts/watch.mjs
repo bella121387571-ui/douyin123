@@ -232,7 +232,7 @@ async function saveBestImage(fileUrl, file) {
 }
 
 // 先给视频 12 秒机会;播不出来就找图片;都没有再多等视频 20 秒(防止网慢误判)
-let playable = await videoPlayable(12000);
+let playable = await videoPlayable(8000);
 let imageUrls = [];
 if (!playable) {
   imageUrls = [...new Set(await collectImages())].slice(0, MAX_IMAGES);

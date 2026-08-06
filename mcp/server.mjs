@@ -67,16 +67,32 @@ function runScript(script, args = [], timeoutMs = 3 * 60 * 1000) {
     let out = '';
     let err = '';
     let timedOut = false;
+    let settled = false;
+    // 只允许结算一次:进程正常退出、被杀掉、或者兜底计时器到点,都从这里返回。
+    // 客户端等不到返回就是"服务器无响应",所以任何情况下都必须有结果。
+    const finish = (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(hardTimer);
+      resolve({ code, out, err, timedOut });
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       killTree();
+      // 杀进程可能失败(比如浏览器没退),再等 8 秒还没退就直接把已有输出返回
+      setTimeout(() => finish(-1), 8000);
     }, timeoutMs);
+    // 最后的兜底:比客户端的等待上限更早结算
+    const hardTimer = setTimeout(() => {
+      timedOut = true;
+      killTree();
+      finish(-1);
+    }, timeoutMs + 20000);
+    child.on('error', () => finish(-1));
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: timedOut ? -1 : code, out, err, timedOut });
-    });
+    child.on('close', (code) => finish(timedOut ? -1 : code));
   });
 }
 
@@ -216,10 +232,10 @@ server.registerTool(
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   async ({ url, frames, transcribe }) => {
-    // 客户端等待上限约 4 分钟,这里必须更早返回
+    // 客户端等待上限约 4 分钟,这里必须留足余量:150s 超时 + 20s 兜底 < 3 分钟
     const args = ['--url', url, '--frames', String(frames)];
     if (transcribe) args.push('--transcribe');
-    const r = await runScript('watch.mjs', args, 200 * 1000);
+    const r = await runScript('watch.mjs', args, 150 * 1000);
     let info = null;
     try {
       info = JSON.parse(r.out.trim());
